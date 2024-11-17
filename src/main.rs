@@ -21,6 +21,58 @@ fn main() {
         .run();
 }
 
+fn setup(mut commands: Commands) {
+    let graph = Graph::default();
+    let simulation_tick = SimulationTick {
+        timer: Timer::from_seconds(0.1, TimerMode::Repeating),
+    };
+    commands.insert_resource(simulation_tick);
+    commands.insert_resource(graph);
+}
+
+fn ui(mut contexts: EguiContexts, mut graph: ResMut<Graph>) {
+    if let Some(ctx) = contexts.try_ctx_mut() {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            graph
+                .state
+                .show(&mut GraphViewer, &SnarlStyle::default(), "snarl", ui);
+        });
+    }
+}
+
+fn tick(mut graph: ResMut<Graph>, time: Res<Time>, mut simulation_tick: ResMut<SimulationTick>) {
+    simulation_tick.timer.tick(time.delta());
+    if simulation_tick.timer.finished() {
+        let outputs = graph
+            .state
+            .node_ids()
+            .filter_map(|(id, node)| match node {
+                Node::Output(_) => Some(id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        for node in outputs {
+            let result = graph.eval(InPinId { node, input: 0 });
+            if let Node::Output(value) = graph.state.get_node_mut(node).unwrap() {
+                *value = result;
+            }
+        }
+    }
+}
+
+#[derive(Default, Resource)]
+struct Graph {
+    state: Snarl<Node>,
+}
+
+struct GraphViewer;
+
+#[derive(Resource)]
+struct SimulationTick {
+    timer: Timer,
+}
+
 #[derive(strum::Display, strum::EnumIter)]
 enum Node {
     Input(bool),
@@ -73,21 +125,22 @@ impl Node {
     }
 }
 
-#[derive(Default, Resource)]
-struct Graph {
-    state: Snarl<Node>,
+impl Graph {
+    fn eval(&mut self, in_pin: InPinId) -> bool {
+        self.state.in_pin(in_pin).remotes.iter().any(|remote| {
+            let node = remote.node;
+            match self.state.get_node(remote.node).unwrap() {
+                Node::Input(value) => *value,
+                Node::Nand(_) => {
+                    let a = self.eval(InPinId { node, input: 0 });
+                    let b = self.eval(InPinId { node, input: 1 });
+                    !(a & b)
+                }
+                _ => unreachable!("Outputs should only be connected to inputs"),
+            }
+        })
+    }
 }
-
-fn setup(mut commands: Commands) {
-    let graph = Graph::default();
-    let simulation_tick = SimulationTick {
-        timer: Timer::from_seconds(0.1, TimerMode::Repeating),
-    };
-    commands.insert_resource(simulation_tick);
-    commands.insert_resource(graph);
-}
-
-struct GraphViewer;
 
 impl SnarlViewer<Node> for GraphViewer {
     fn title(&mut self, node: &Node) -> String {
@@ -153,55 +206,4 @@ impl SnarlViewer<Node> for GraphViewer {
             node.show_body(ui);
         }
     }
-}
-
-fn ui(mut contexts: EguiContexts, mut graph: ResMut<Graph>) {
-    if let Some(ctx) = contexts.try_ctx_mut() {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            graph
-                .state
-                .show(&mut GraphViewer, &SnarlStyle::default(), "snarl", ui);
-        });
-    }
-}
-
-#[derive(Resource)]
-struct SimulationTick {
-    timer: Timer,
-}
-
-fn tick(mut graph: ResMut<Graph>, time: Res<Time>, mut tick: ResMut<SimulationTick>) {
-    tick.timer.tick(time.delta());
-    if tick.timer.finished() {
-        let outputs = graph
-            .state
-            .node_ids()
-            .filter_map(|(id, node)| match node {
-                Node::Output(_) => Some(id),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-
-        for node in outputs {
-            let result = eval(&mut graph, InPinId { node, input: 0 });
-            if let Node::Output(value) = graph.state.get_node_mut(node).unwrap() {
-                *value = result;
-            }
-        }
-    }
-}
-
-fn eval(graph: &mut Graph, in_pin: InPinId) -> bool {
-    graph.state.in_pin(in_pin).remotes.iter().any(|remote| {
-        let node = remote.node;
-        match graph.state.get_node(remote.node).unwrap() {
-            Node::Input(value) => *value,
-            Node::Nand(_) => {
-                let a = eval(graph, InPinId { node, input: 0 });
-                let b = eval(graph, InPinId { node, input: 1 });
-                !(a & b)
-            }
-            _ => unreachable!("Outputs should only be connected to inputs"),
-        }
-    })
 }
