@@ -18,7 +18,8 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(EguiPlugin)
         .add_systems(Startup, setup)
-        .add_systems(Update, (ui, tick))
+        .add_systems(Update, ui)
+        .add_systems(FixedUpdate, tick)
         .run();
 }
 
