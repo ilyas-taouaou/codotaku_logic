@@ -1,0 +1,19 @@
+[package]
+name = "codotaku_logic"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { version = "0.14.0", default-features = false, features = [
+    "dynamic_linking",
+    "bevy_render",
+    "bevy_winit",
+    "bevy_asset",
+    "multi_threaded",
+] }
+log = { version = "*", features = [
+    "max_level_debug",
+    "release_max_level_warn",
+] }
+bevy_egui = "0.30.0"
+egui-snarl = { version = "0.5.0", default-features = false }
