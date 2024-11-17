@@ -10,6 +10,7 @@ use egui_snarl::{
     ui::{PinInfo, SnarlStyle, SnarlViewer},
     InPinId, Snarl,
 };
+use recursive::recursive;
 use strum::IntoEnumIterator;
 
 fn main() {
@@ -126,6 +127,7 @@ impl Node {
 }
 
 impl Graph {
+    #[recursive]
     fn eval(&mut self, in_pin: InPinId) -> bool {
         self.state.in_pin(in_pin).remotes.iter().any(|remote| {
             let node = remote.node;
@@ -136,7 +138,7 @@ impl Graph {
                     let b = self.eval(InPinId { node, input: 1 });
                     !(a & b)
                 }
-                _ => unreachable!("Outputs should only be connected to inputs"),
+                Node::Output(_) => unreachable!("Outputs should only be connected to inputs"),
             }
         })
     }

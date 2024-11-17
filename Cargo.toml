@@ -24,3 +24,4 @@ strum = { version = "0.26.3", default-features = false, features = [
     "std",
     "derive",
 ] }
+recursive = "0.1.1"
