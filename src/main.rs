@@ -1,5 +1,5 @@
-#![allow(unused, dead_code)]
-#![deny(unused_must_use)]
+// #![allow(unused, dead_code)]
+// #![deny(unused_must_use)]
 
 use bevy::prelude::*;
 use bevy_egui::{
@@ -8,8 +8,9 @@ use bevy_egui::{
 };
 use egui_snarl::{
     ui::{PinInfo, SnarlStyle, SnarlViewer},
-    InPinId, NodeId, Snarl,
+    InPinId, Snarl,
 };
+use strum::IntoEnumIterator;
 
 fn main() {
     App::new()
@@ -20,10 +21,56 @@ fn main() {
         .run();
 }
 
+#[derive(strum::Display, strum::EnumIter)]
 enum Node {
     Input(bool),
     Output(bool),
     Nand(bool),
+}
+
+impl Node {
+    fn input_count(&self) -> usize {
+        match self {
+            Node::Input(_) => 0,
+            Node::Output(_) => 1,
+            Node::Nand(_) => 2,
+        }
+    }
+
+    fn output_count(&self) -> usize {
+        match self {
+            Node::Input(_) => 1,
+            Node::Output(_) => 0,
+            Node::Nand(_) => 1,
+        }
+    }
+
+    fn has_body(&self) -> bool {
+        match self {
+            Node::Input(_) => true,
+            Node::Output(_) => true,
+            Node::Nand(_) => false,
+        }
+    }
+
+    fn show_body(&mut self, ui: &mut egui::Ui) {
+        match self {
+            Node::Input(value) => {
+                ui.checkbox(value, "");
+            }
+            Node::Output(value) => {
+                ui.checkbox(value, "");
+            }
+            Node::Nand(_) => unreachable!("Nand nodes should not have bodies"),
+        }
+    }
+
+    fn graph_menu_item(self, ui: &mut egui::Ui, snarl: &mut Snarl<Node>, pos: Pos2) {
+        if ui.button(format!("Add {}", self)).clicked() {
+            snarl.insert_node(pos, self);
+            ui.close_menu();
+        }
+    }
 }
 
 #[derive(Default, Resource)]
@@ -32,7 +79,7 @@ struct Graph {
 }
 
 fn setup(mut commands: Commands) {
-    let mut graph = Graph::default();
+    let graph = Graph::default();
     let simulation_tick = SimulationTick {
         timer: Timer::from_seconds(0.1, TimerMode::Repeating),
     };
@@ -44,50 +91,38 @@ struct GraphViewer;
 
 impl SnarlViewer<Node> for GraphViewer {
     fn title(&mut self, node: &Node) -> String {
-        match node {
-            Node::Input(_) => "Input".to_string(),
-            Node::Output(_) => "Output".to_string(),
-            Node::Nand(_) => "Nand".to_string(),
-        }
+        node.to_string()
     }
 
     fn outputs(&mut self, node: &Node) -> usize {
-        match node {
-            Node::Input(_) => 1,
-            Node::Output(_) => 0,
-            Node::Nand(_) => 1,
-        }
+        node.output_count()
     }
 
     fn inputs(&mut self, node: &Node) -> usize {
-        match node {
-            Node::Input(_) => 0,
-            Node::Output(_) => 1,
-            Node::Nand(_) => 2,
-        }
+        node.input_count()
     }
 
     fn show_input(
         &mut self,
-        pin: &egui_snarl::InPin,
-        ui: &mut egui::Ui,
-        scale: f32,
-        snarl: &mut Snarl<Node>,
+        _pin: &egui_snarl::InPin,
+        _ui: &mut egui::Ui,
+        _scale: f32,
+        _snarl: &mut Snarl<Node>,
     ) -> egui_snarl::ui::PinInfo {
         PinInfo::default()
     }
 
     fn show_output(
         &mut self,
-        pin: &egui_snarl::OutPin,
-        ui: &mut egui::Ui,
-        scale: f32,
-        snarl: &mut Snarl<Node>,
+        _pin: &egui_snarl::OutPin,
+        _ui: &mut egui::Ui,
+        _scale: f32,
+        _snarl: &mut Snarl<Node>,
     ) -> egui_snarl::ui::PinInfo {
         PinInfo::default()
     }
 
-    fn has_graph_menu(&mut self, pos: Pos2, snarl: &mut Snarl<Node>) -> bool {
+    fn has_graph_menu(&mut self, _pos: Pos2, _snarl: &mut Snarl<Node>) -> bool {
         true
     }
 
@@ -95,50 +130,27 @@ impl SnarlViewer<Node> for GraphViewer {
         &mut self,
         pos: Pos2,
         ui: &mut egui::Ui,
-        scale: f32,
+        _scale: f32,
         snarl: &mut Snarl<Node>,
     ) {
-        if ui.button("Add Input").clicked() {
-            snarl.insert_node(pos, Node::Input(false));
-            ui.close_menu();
-        }
-        if ui.button("Add Output").clicked() {
-            snarl.insert_node(pos, Node::Output(false));
-            ui.close_menu();
-        }
-        if ui.button("Add Nand").clicked() {
-            snarl.insert_node(pos, Node::Nand(false));
-            ui.close_menu();
-        }
+        Node::iter().for_each(|value| value.graph_menu_item(ui, snarl, pos));
     }
 
     fn has_body(&mut self, node: &Node) -> bool {
-        match node {
-            Node::Input(_) => true,
-            Node::Output(_) => true,
-            Node::Nand(_) => false,
-        }
+        node.has_body()
     }
 
     fn show_body(
         &mut self,
         node: egui_snarl::NodeId,
-        inputs: &[egui_snarl::InPin],
-        outputs: &[egui_snarl::OutPin],
+        _inputs: &[egui_snarl::InPin],
+        _outputs: &[egui_snarl::OutPin],
         ui: &mut egui::Ui,
-        scale: f32,
+        _scale: f32,
         snarl: &mut Snarl<Node>,
     ) {
         if let Some(node) = snarl.get_node_mut(node) {
-            match node {
-                Node::Input(value) => {
-                    ui.checkbox(value, "");
-                }
-                Node::Output(value) => {
-                    ui.checkbox(value, "");
-                }
-                Node::Nand(_) => unreachable!("Nand nodes should not have bodies"),
-            }
+            node.show_body(ui);
         }
     }
 }
@@ -161,54 +173,35 @@ struct SimulationTick {
 fn tick(mut graph: ResMut<Graph>, time: Res<Time>, mut tick: ResMut<SimulationTick>) {
     tick.timer.tick(time.delta());
     if tick.timer.finished() {
-        let mut outputs = vec![];
-        for (id, node) in graph.state.node_ids() {
-            match node {
-                Node::Output(_) => outputs.push(id),
-                _ => {}
-            }
-        }
+        let outputs = graph
+            .state
+            .node_ids()
+            .filter_map(|(id, node)| match node {
+                Node::Output(_) => Some(id),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
         for node in outputs {
-            let result = f(&mut graph, InPinId { node, input: 0 });
-            let mut node = graph.state.get_node_mut(node).unwrap();
-            match node {
-                Node::Output(value) => {
-                    *value = result;
-                }
-                _ => unreachable!("Outputs should only be connected to inputs"),
+            let result = eval(&mut graph, InPinId { node, input: 0 });
+            if let Node::Output(value) = graph.state.get_node_mut(node).unwrap() {
+                *value = result;
             }
         }
     }
 }
 
-fn f(graph: &mut Graph, in_pin: InPinId) -> bool {
-    let pin = graph.state.in_pin(in_pin);
-    let mut result = false;
-    for remote in pin.remotes {
-        let remote_node = graph.state.get_node(remote.node).unwrap();
-        match remote_node {
-            Node::Input(value) => {
-                result |= *value;
-            }
-            Node::Nand(output) => {
-                let a = f(
-                    graph,
-                    InPinId {
-                        node: remote.node,
-                        input: 0,
-                    },
-                );
-                let b = f(
-                    graph,
-                    InPinId {
-                        node: remote.node,
-                        input: 1,
-                    },
-                );
-                result |= !(a & b);
+fn eval(graph: &mut Graph, in_pin: InPinId) -> bool {
+    graph.state.in_pin(in_pin).remotes.iter().any(|remote| {
+        let node = remote.node;
+        match graph.state.get_node(remote.node).unwrap() {
+            Node::Input(value) => *value,
+            Node::Nand(_) => {
+                let a = eval(graph, InPinId { node, input: 0 });
+                let b = eval(graph, InPinId { node, input: 1 });
+                !(a & b)
             }
             _ => unreachable!("Outputs should only be connected to inputs"),
         }
-    }
-    result
+    })
 }
