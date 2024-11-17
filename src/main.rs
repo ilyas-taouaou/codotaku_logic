@@ -24,7 +24,7 @@ fn main() {
 fn setup(mut commands: Commands) {
     let graph = Graph::default();
     let simulation_tick = SimulationTick {
-        timer: Timer::from_seconds(0.1, TimerMode::Repeating),
+        timer: Timer::from_seconds(0.0, TimerMode::Repeating),
     };
     commands.insert_resource(simulation_tick);
     commands.insert_resource(graph);
