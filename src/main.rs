@@ -69,8 +69,7 @@ fn ui(
     }
 }
 
-fn tick(mut graph: ResMut<Graph>, mut simulation: ResMut<Simulation>, time: Res<Time>) {
-    println!("{}", 1.0 / time.delta().as_secs_f64());
+fn tick(mut graph: ResMut<Graph>, mut simulation: ResMut<Simulation>) {
     graph.tick(&mut simulation);
 }
 
