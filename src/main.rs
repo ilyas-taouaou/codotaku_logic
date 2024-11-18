@@ -28,14 +28,20 @@ fn main() {
 fn setup(mut commands: Commands) {
     let graph = Graph::default();
     let simulation_tick = Simulation {
-        timer: Timer::from_seconds(0.1, TimerMode::Repeating),
         ticks: 0,
+        is_paused: false,
+        dt: Duration::from_secs_f32(1.0 / 60.0),
     };
     commands.insert_resource(simulation_tick);
     commands.insert_resource(graph);
 }
 
-fn ui(mut contexts: EguiContexts, mut graph: ResMut<Graph>, mut simulation: ResMut<Simulation>) {
+fn ui(
+    mut contexts: EguiContexts,
+    mut graph: ResMut<Graph>,
+    mut simulation: ResMut<Simulation>,
+    mut time: ResMut<Time<Fixed>>,
+) {
     if let Some(ctx) = contexts.try_ctx_mut() {
         egui::CentralPanel::default().show(ctx, |ui| {
             graph
@@ -45,38 +51,27 @@ fn ui(mut contexts: EguiContexts, mut graph: ResMut<Graph>, mut simulation: ResM
         egui::Window::new("Controls").show(ctx, |ui| {
             // slider for the simulation speed
             ui.horizontal(|ui| {
-                let mut paused = simulation.timer.paused();
-                if ui.checkbox(&mut paused, "Paused").changed() {
-                    if paused {
-                        simulation.timer.pause();
-                    } else {
-                        simulation.timer.unpause();
-                    }
-                }
+                ui.checkbox(&mut simulation.is_paused, "Paused");
 
-                if paused {
+                if simulation.is_paused {
                     if ui.button("Step").clicked() {
-                        graph.tick(&mut simulation, Duration::ZERO);
+                        graph.tick(&mut simulation);
                     }
                 } else {
-                    let duration = simulation.timer.duration().as_secs_f32();
-                    let mut hz = if duration == 0.0 { 0.0 } else { 1.0 / duration };
-                    ui.add(egui::Slider::new(&mut hz, 0.0..=100.0).integer().text("Hz"));
-                    simulation
-                        .timer
-                        .set_duration(Duration::from_secs_f32(if hz == 0.0 {
-                            0.0
-                        } else {
-                            1.0 / hz
-                        }));
+                    let mut hz = (1.0 / simulation.dt.as_secs_f32()) / 2.0;
+                    ui.add(egui::DragValue::new(&mut hz).speed(0.1));
+                    hz *= 2.0;
+                    simulation.dt = Duration::from_secs_f32(1.0 / hz);
+                    time.set_timestep(simulation.dt);
                 }
             });
         });
     }
 }
 
-fn tick(mut graph: ResMut<Graph>, time: Res<Time>, mut simulation: ResMut<Simulation>) {
-    graph.tick(&mut simulation, time.delta());
+fn tick(mut graph: ResMut<Graph>, mut simulation: ResMut<Simulation>, time: Res<Time>) {
+    println!("{}", 1.0 / time.delta().as_secs_f64());
+    graph.tick(&mut simulation);
 }
 
 #[derive(Default, Resource)]
@@ -88,8 +83,9 @@ struct GraphViewer;
 
 #[derive(Resource)]
 struct Simulation {
-    timer: Timer,
     ticks: u64,
+    is_paused: bool,
+    dt: Duration,
 }
 
 #[derive(strum::Display, strum::EnumIter)]
@@ -179,11 +175,7 @@ impl Node {
     fn graph_menu_item(self, ui: &mut egui::Ui, snarl: &mut Snarl<Node>, pos: Pos2) {
         if ui.button(format!("Add {}", self)).clicked() {
             ui.close_menu();
-            if !self.has_body() && self.input_count() <= 1 && self.output_count() <= 1 {
-                snarl.insert_node_collapsed(pos, self);
-            } else {
-                snarl.insert_node(pos, self);
-            }
+            snarl.insert_node(pos, self);
         }
     }
 }
@@ -245,10 +237,8 @@ impl Graph {
         result
     }
 
-    fn tick(&mut self, simulation: &mut Simulation, dt: Duration) {
-        simulation.timer.tick(dt);
-
-        if dt == Duration::ZERO || simulation.timer.finished() {
+    fn tick(&mut self, simulation: &mut Simulation) {
+        if !simulation.is_paused {
             simulation.ticks += 1;
 
             let outputs = self
